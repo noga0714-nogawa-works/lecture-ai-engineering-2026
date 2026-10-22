@@ -27,10 +27,10 @@ def ask(question: str) -> str:
 
     usage = getattr(response, "usage_metadata", None)
     if usage is not None:
-        prompt_tokens = getattr(usage, "prompt_token_count", None)
-        completion_tokens = getattr(usage, "completion_token_count", None)
-        if prompt_tokens is not None or completion_tokens is not None:
-            print(f"[usage] input_tokens={prompt_tokens}, output_tokens={completion_tokens}")
+        input_tokens = getattr(usage, "prompt_token_count", None)
+        output_tokens = getattr(usage, "candidates_token_count", None)
+        if input_tokens is not None or output_tokens is not None:
+            print(f"[usage] input_tokens={input_tokens}, output_tokens={output_tokens}")
 
     return response.text
 

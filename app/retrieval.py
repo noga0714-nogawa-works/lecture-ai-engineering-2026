@@ -138,6 +138,41 @@ def search(query: str) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def search_with_neighbors(query: str) -> list[dict]:
+    """ベクトル検索結果に同じ資料内の前後ページを追加する。"""
+    hits = search(query)
+    pages = load_pages(RAG_SOURCE)
+    pages_by_document = defaultdict(list)
+    for page in pages:
+        pages_by_document[page["document_id"]].append(page)
+
+    results = list(hits)
+    result_ids = {hit["page_id"] for hit in hits}
+    for hit in hits:
+        document_pages = pages_by_document.get(hit["document_id"], [])
+        position = next(
+            (i for i, page in enumerate(document_pages) if page["page_id"] == hit["page_id"]),
+            None,
+        )
+        if position is None:
+            continue
+        for offset, relation in ((-1, "previous"), (1, "next")):
+            neighbor_position = position + offset
+            if not 0 <= neighbor_position < len(document_pages):
+                continue
+            neighbor = document_pages[neighbor_position]
+            if neighbor["page_id"] in result_ids:
+                continue
+            results.append({
+                **neighbor,
+                "distance": None,
+                "neighbor_of": hit["page_id"],
+                "relation": relation,
+            })
+            result_ids.add(neighbor["page_id"])
+    return results
+
+
 def search_graph(query: str) -> dict:
     """ベクトル検索を入口に、前後ページと共通用語で候補を広げる。"""
     pages = {page["page_id"]: page for page in load_pages(RAG_SOURCE)}
@@ -201,11 +236,16 @@ def run_full_context(agent, question: str, model, instructions: str, prompt_temp
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="エージェントを使わず、講義資料の検索だけを実行する")
     parser.add_argument("query", help="調べたい内容")
+    parser.add_argument("--neighbors", action="store_true", help="検索結果に同じ資料内の前後ページを追加する")
     args = parser.parse_args()
-    for i, result in enumerate(search(args.query), 1):
+    results = search_with_neighbors(args.query) if args.neighbors else search(args.query)
+    for i, result in enumerate(results, 1):
         print(f"\n{'=' * 60}\n検索結果 {i}\n{'=' * 60}")
         print(f"講義: {result['document_title']}")
         print(f"章: {result['section']}")
         print(f"タイトル: {result['title']}")
         print(f"ページ: {result['page']}")
+        if "neighbor_of" in result:
+            relation = "前ページ" if result["relation"] == "previous" else "次ページ"
+            print(f"追加理由: {result['neighbor_of']} の{relation}")
         print(f"\n{result['content']}")

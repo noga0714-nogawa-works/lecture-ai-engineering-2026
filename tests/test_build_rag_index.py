@@ -42,6 +42,34 @@ def test_built_index_can_be_searched(materials, monkeypatch):
     assert hits[0]["distance"] == pytest.approx(0)
 
 
+def test_search_with_neighbors_adds_adjacent_pages_once_within_document(monkeypatch):
+    pages = [
+        {"page_id": "doc-a-p1", "document_id": "doc-a", "content": "A1"},
+        {"page_id": "doc-a-p2", "document_id": "doc-a", "content": "A2"},
+        {"page_id": "doc-a-p3", "document_id": "doc-a", "content": "A3"},
+        {"page_id": "doc-b-p1", "document_id": "doc-b", "content": "B1"},
+    ]
+    hits = [
+        {**pages[1], "distance": 0.1},
+        {**pages[2], "distance": 0.2},
+        {**pages[3], "distance": 0.3},
+    ]
+    monkeypatch.setattr(retrieval, "search", lambda _: hits)
+    monkeypatch.setattr(retrieval, "load_pages", lambda _: pages)
+
+    results = retrieval.search_with_neighbors("質問")
+
+    assert [page["page_id"] for page in results] == [
+        "doc-a-p2", "doc-a-p3", "doc-b-p1", "doc-a-p1",
+    ]
+    assert results[-1] == {
+        **pages[0],
+        "distance": None,
+        "neighbor_of": "doc-a-p2",
+        "relation": "previous",
+    }
+
+
 def test_existing_index_survives_failed_rebuild(materials):
     source, database = materials
     build_index(source, database, embedder=lambda *_: [1, 0])
